@@ -8,7 +8,7 @@ Open `index.html` in a browser. It uses sample data on first launch and stores c
 ## Current prototype
 - One-tap Wee / Poo / Wee + Poo logging
 - Breastfeed side selection
-- Live feed timer
+- Live feed timer (timestamp-based, so it stays accurate when the app is backgrounded or the screen is locked)
 - Stop feed and calculate duration
 - Today timeline
 - History view

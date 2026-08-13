@@ -82,7 +82,7 @@ function feeding(){
   const e=state.events.find(x=>x.id===state.feed.id);
   const sec=duration(e.time, e.end||new Date().toISOString());
   return `<button class="back" id="back">‹ Back</button><div class="center"><div class="feed-title">Breastfeeding</div><div class="question">${e.breast}</div>
-  <div class="timer-ring"><div class="timer">${fmtDuration(sec)}</div><div class="timer-small">started ${fmtTime(e.time)}</div></div>
+  <div class="timer-ring"><div class="timer" id="liveTimer">${fmtDuration(sec)}</div><div class="timer-small">started ${fmtTime(e.time)}</div></div>
   <button class="primary" id="stop">■ &nbsp; STOP FEED</button>
   <button class="secondary" id="note">ADD NOTE</button></div>`;
 }
@@ -141,6 +141,21 @@ function bind(){
   };
   const settings=document.querySelector("#settings"); if(settings)settings.onclick=()=>alert("Settings will be added after the Airtable connection is working.");
   const note=document.querySelector("#note"); if(note)note.onclick=()=>alert("Notes will be added in the next iteration.");
-  if(state.screen==="feeding") setTimeout(render,1000);
+  if(state.screen==="feeding"){
+    const timerEl = document.querySelector("#liveTimer");
+    const updateTimer = () => {
+      if(state.screen !== "feeding") return;
+      const e = state.events.find(x=>x.id===state.feed.id);
+      if(!e) return;
+      if(timerEl) timerEl.textContent = fmtDuration(duration(e.time, new Date().toISOString()));
+      window.requestAnimationFrame(updateTimer);
+    };
+    window.requestAnimationFrame(updateTimer);
+  }
 }
+
+document.addEventListener("visibilitychange", () => {
+  if(state.screen === "feeding") render();
+});
+
 load(); render();

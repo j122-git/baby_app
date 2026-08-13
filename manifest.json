@@ -1,0 +1,9 @@
+{
+  "name":"Baby Chloe – Quick Log",
+  "short_name":"Chloe",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#fafafa",
+  "theme_color":"#ffffff",
+  "icons":[]
+}

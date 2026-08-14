@@ -1,57 +1,4 @@
 
-const API_URL = "https://baby-app.thibaud-guerrero.workers.dev";
-const TOKEN_KEY = "baby-chloe-app-token";
-function getAppToken(){ return localStorage.getItem(TOKEN_KEY)||""; }
-function setAppToken(v){ localStorage.setItem(TOKEN_KEY,v.trim()); }
-function clearAppToken(){ localStorage.removeItem(TOKEN_KEY); }
-
-async function apiRequest(path, options={}){
-  const token=getAppToken();
-  if(!token) throw new Error("APP_TOKEN_MISSING");
-  const res=await fetch(`${API_URL}${path}`,{
-    ...options,
-    headers:{"Content-Type":"application/json","X-App-Token":token,...(options.headers||{})}
-  });
-  let data={}; try{data=await res.json();}catch{}
-  if(!res.ok){if(res.status===401){clearAppToken();throw new Error("UNAUTHORISED");}throw new Error(data?.error||"API_ERROR");}
-  return data;
-}
-function tokenSetup(){return `<div class="center" style="padding:28px 20px">
-<div class="feed-title">Baby Chloe</div><div class="question">Connect this phone</div>
-<p style="max-width:340px;margin:0 auto 20px;line-height:1.5">Enter your family access code. It will be stored only on this phone.</p>
-<input id="appTokenInput" type="password" autocomplete="off" placeholder="Family access code" style="width:100%;max-width:340px;padding:15px;border:1px solid #ccc;border-radius:12px;font-size:18px;box-sizing:border-box">
-<button class="primary" id="saveToken" style="margin-top:14px">CONNECT</button></div>`;}
-function showApiError(message){
- let el=document.querySelector("#apiError");
- if(!el){el=document.createElement("div");el.id="apiError";el.style.cssText="position:fixed;left:16px;right:16px;bottom:16px;padding:14px 16px;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.12);z-index:9999;font-size:14px";document.body.appendChild(el);}
- el.innerHTML=`${message} <button id="retryApi" style="margin-left:8px">OK</button>`;document.querySelector("#retryApi").onclick=()=>el.remove();
-}
-async function createRemoteEvent(payload){
- if(!getAppToken()){state.screen="token";render();return;}
- try{
-  const r=await apiRequest("/events",{method:"POST",body:JSON.stringify(payload)});
-  const f=r.record?.fields||{};
-  state.events.push({id:r.record.id,type:f.Type||payload.type,time:f.Time||isoNow(),breast:f.Breast||null,end:f["End Time"]||null,notes:f.Notes||""});
-  save();state.selectedId=r.record.id;state.screen="confirm";render();
- }catch(err){if(err.message==="UNAUTHORISED"){state.screen="token";render();return;}showApiError("Couldn't save the event. Please try again.");}
-}
-async function startRemoteFeed(breast){
- if(!getAppToken()){state.screen="token";render();return;}
- try{
-  const r=await apiRequest("/events",{method:"POST",body:JSON.stringify({type:"Breastfeed",breast})});
-  const f=r.record?.fields||{};const e={id:r.record.id,type:"Breastfeed",time:f.Time||isoNow(),breast:f.Breast||breast,end:null,notes:""};
-  state.events.push(e);save();state.feed={id:e.id};state.screen="feeding";render();
- }catch(err){if(err.message==="UNAUTHORISED"){state.screen="token";render();return;}showApiError("Couldn't start the feed. Please try again.");}
-}
-async function stopRemoteFeed(){
- const e=state.events.find(x=>x.id===state.feed?.id);if(!e)return;
- const end=isoNow();
- try{await apiRequest("/events/"+encodeURIComponent(e.id),{method:"PATCH",body:JSON.stringify({endTime:end})});
- e.end=end;save();state.selectedId=e.id;state.screen="detail";state.feed=null;render();
- }catch(err){if(err.message==="UNAUTHORISED"){state.screen="token";render();return;}showApiError("Couldn't stop the feed. Please try again.");}
-}
-
-
 const KEY = "baby-chloe-events-v1";
 let state = { events: [], screen: "home", feed: null, selectedId: null };
 
@@ -94,7 +41,6 @@ function todayEvents(){
 }
 function render(){
   const app=document.querySelector("#app");
-  if(state.screen==="token"){app.innerHTML=tokenSetup();bind();return;}
   if(state.screen==="home") app.innerHTML=home();
   if(state.screen==="feed") app.innerHTML=feedStart();
   if(state.screen==="feeding") app.innerHTML=feeding();
@@ -169,58 +115,61 @@ function addInstant(type){
   state.events.push(e); save(); state.selectedId=e.id; state.screen="confirm"; render();
 }
 function bind(){
-  const saveTokenBtn=document.querySelector("#saveToken");
-  if(saveTokenBtn) saveTokenBtn.onclick=async()=>{
-    const token=document.querySelector("#appTokenInput")?.value?.trim();
-    if(!token){alert("Please enter the family access code.");return;}
-    setAppToken(token);
-    try{await apiRequest("/events");state.screen="home";render();}
-    catch(err){clearAppToken();alert(err.message==="UNAUTHORISED"?"That access code isn't correct.":"Couldn't connect. Check your connection.");}
-  };
-
   document.querySelectorAll(".quick").forEach(b=>b.onclick=()=>{
     const a=b.dataset.action;
     if(a==="feed"){state.screen="feed";render();}
-    if(a==="wee")createRemoteEvent({type:"Wee"});
-    if(a==="poo")createRemoteEvent({type:"Poo"});
-    if(a==="both")createRemoteEvent({type:"Wee + Poo"});
+    if(a==="wee")addInstant("Wee");
+    if(a==="poo")addInstant("Poo");
+    if(a==="both")addInstant("Wee + Poo");
   });
   document.querySelectorAll(".event-row").forEach(b=>b.onclick=()=>{state.selectedId=b.dataset.id;state.screen="detail";render();});
   document.querySelectorAll("[data-breast]").forEach(b=>b.onclick=()=>{
-    startRemoteFeed(b.dataset.breast);
+    const e={id:uid(),type:"Breastfeed",time:isoNow(),breast:b.dataset.breast};
+    state.events.push(e);save();state.feed={id:e.id};state.screen="feeding";render();
   });
   const back=document.querySelector("#back"); if(back)back.onclick=()=>{state.screen="home";render();};
   const hist=document.querySelector("#history"); if(hist)hist.onclick=()=>{state.screen="history";render();};
   const stop=document.querySelector("#stop"); if(stop)stop.onclick=()=>{
-    stopRemoteFeed();
+    const e=state.events.find(x=>x.id===state.feed.id); if(e){e.end=isoNow();save();state.selectedId=e.id;state.screen="detail";render();}
   };
   const undo=document.querySelector("#undo"); if(undo)undo.onclick=()=>{
     state.events=state.events.filter(e=>e.id!==state.selectedId);save();state.screen="home";render();
   };
   const home=document.querySelector("#home"); if(home)home.onclick=()=>{state.screen="home";render();};
-  const del=document.querySelector("#delete"); if(del)del.onclick=async()=>{
-    if(confirm("Delete this event?")){
-      const id=state.selectedId;
-      if(id && !String(id).startsWith("demo_")){
-        try{await apiRequest("/events/"+encodeURIComponent(id),{method:"DELETE"});}
-        catch(err){showApiError("Couldn't delete the event.");return;}
-      }
-      state.events=state.events.filter(e=>e.id!==id);save();state.screen="home";render();
-    }
+  const del=document.querySelector("#delete"); if(del)del.onclick=()=>{
+    if(confirm("Delete this event?")){state.events=state.events.filter(e=>e.id!==state.selectedId);save();state.screen="home";render();}
   };
   const settings=document.querySelector("#settings"); if(settings)settings.onclick=()=>alert("Settings will be added after the Airtable connection is working.");
   const note=document.querySelector("#note"); if(note)note.onclick=()=>alert("Notes will be added in the next iteration.");
+  // Live breastfeeding timer.
+  // Use a one-second interval rather than requestAnimationFrame: the browser
+  // can throttle animation frames when the phone is backgrounded/locked.
   window.clearInterval(window.babyChloeTimer);
-  window.babyChloeTimer=null;
+  window.babyChloeTimer = null;
+
   if(state.screen==="feeding"){
-    const timerEl=document.querySelector("#liveTimer");
-    const updateTimer=()=>{const e=state.events.find(x=>x.id===state.feed?.id);if(e&&timerEl)timerEl.textContent=fmtDuration(duration(e.time,new Date().toISOString()));};
-    updateTimer();window.babyChloeTimer=window.setInterval(updateTimer,1000);
+    const updateTimer = () => {
+      if(state.screen !== "feeding") return;
+
+      const e = state.events.find(x=>x.id===state.feed.id);
+      const timerEl = document.querySelector("#liveTimer");
+
+      if(!e || !timerEl) return;
+
+      timerEl.textContent = fmtDuration(
+        duration(e.time, new Date().toISOString())
+      );
+    };
+
+    updateTimer();
+    window.babyChloeTimer = window.setInterval(updateTimer, 1000);
   }
 }
 
 document.addEventListener("visibilitychange", () => {
-  if(state.screen === "feeding") render();
+  if(state.screen === "feeding" && document.visibilityState === "visible"){
+    render();
+  }
 });
 
 load(); render();
